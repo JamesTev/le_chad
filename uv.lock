@@ -76,6 +76,7 @@ dependencies = [
     { name = "feature-builder" },
     { name = "httpx" },
     { name = "le-chad" },
+    { name = "mistralai" },
     { name = "uvicorn" },
 ]
 
@@ -85,6 +86,7 @@ requires-dist = [
     { name = "feature-builder", editable = "feature-builder" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "le-chad", editable = "le_chad" },
+    { name = "mistralai", specifier = ">=1.0.0" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 
