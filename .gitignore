@@ -26,3 +26,5 @@ wheels/
 feasibility_output.md
 prolific_builders.md
 ideas.md
+
+*.db

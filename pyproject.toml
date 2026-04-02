@@ -5,12 +5,13 @@ description = "Multi-agent software factory that reactively fixes and proactivel
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn>=0.34.0",
+    "le-chad",
+    "feature-builder",
 ]
 
 [tool.uv.workspace]
-members = ["feature-builder"]
+members = ["feature-builder", "le_chad"]
 
 [tool.uv.sources]
 feature-builder = { workspace = true }
+le-chad = { workspace = true }
