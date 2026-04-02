@@ -10,7 +10,9 @@ from le_chad.models import (
     CommentCreate,
     StandupCreate,
     ProjectCreate,
+    EmbeddingRequest,
 )
+import httpx
 
 app = FastAPI(title="le Chad", debug=DEBUG)
 
@@ -348,6 +350,23 @@ def get_stats():
         "completion_rate": done_count / total,
         "users": user_count,
     }
+
+
+# ---- Embeddings ----
+
+
+@app.post("/api/embeddings")
+def get_embeddings(request: EmbeddingRequest):
+    async def _get_embedding():
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "http://localhost:8001/embeddings",
+                json={"text": request.text}
+            )
+            return response.json()
+
+    embedding = _get_embedding()
+    return embedding
 
 
 # ---- Helpers ----

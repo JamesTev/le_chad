@@ -39,3 +39,12 @@ class ProjectCreate(BaseModel):
     name: str
     description: str = ""
     owner: str = None
+
+
+class EmbeddingRequest(BaseModel):
+    text: str
+
+
+class EmbeddingResponse(BaseModel):
+    embedding: list[float]
+    model: str

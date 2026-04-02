@@ -1,5 +1,5 @@
 import sqlite3
-
+import math
 from le_chad.config import DATABASE_URL
 
 _warm_cache = []
@@ -42,6 +42,7 @@ def init_db():
             assignee TEXT,
             priority TEXT DEFAULT 'medium',
             project_id INTEGER,
+            embedding BLOB,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -113,40 +114,40 @@ def seed_data():
         c.execute("INSERT INTO projects (name, description, owner) VALUES (?, ?, ?)", p)
 
     tasks = [
-        ("Fix login timeout", "Users report being logged out after 5 minutes", "open", "alice", "high", 1),
-        ("Add password reset", "No way to reset password currently", "open", "bob", "high", 1),
-        ("Dashboard loading slow", "Takes 10+ seconds to load task list", "open", "bob", "critical", 2),
-        ("Search is broken", "Search returns no results for exact matches", "open", "alice", "high", 1),
-        ("Add dark mode", "Multiple user requests for dark mode", "open", "charlie", "medium", 2),
-        ("Fix mobile layout", "Buttons overlap on small screens", "open", "charlie", "high", 3),
-        ("Add CSV export", "Users want to export their tasks", "open", None, "medium", 1),
-        ("Rate limiting", "No rate limiting on API endpoints", "open", "alice", "high", 1),
-        ("Fix duplicate users", "Can create multiple users with same username", "open", "alice", "critical", 1),
-        ("Add task due dates", "Tasks have no due date field", "open", None, "medium", 1),
-        ("Improve error messages", "API returns generic 500 errors", "in_progress", "bob", "medium", 1),
-        ("Add user avatars", "Profile pictures for users", "open", None, "low", 2),
-        ("Fix comment count", "Task list shows wrong number of comments", "open", "alice", "medium", 1),
-        ("Add task labels", "Users want to tag tasks with labels", "open", None, "medium", 1),
-        ("Setup CI/CD", "No automated testing or deployment", "open", "alice", "high", 4),
-        ("Fix pagination", "Page 2 shows same results as page 1", "open", "bob", "high", 1),
-        ("Add email notifications", "No notifications when assigned to task", "open", None, "medium", 1),
-        ("Fix timezone handling", "All dates show in UTC regardless of user timezone", "open", "bob", "medium", 1),
-        ("Add task attachments", "Users want to attach files to tasks", "open", None, "low", 1),
-        ("Improve API docs", "Swagger docs are incomplete", "open", None, "low", 1),
-        ("Fix standup date filter", "Cannot filter standups by date range", "open", "alice", "medium", 1),
-        ("Add project archiving", "No way to archive completed projects", "open", None, "low", 1),
-        ("Fix memory leak", "Server memory usage grows over time", "open", "alice", "critical", 4),
-        ("Add bulk task update", "Cannot update multiple tasks at once", "open", None, "medium", 1),
-        ("Fix CORS errors", "Frontend gets CORS errors on every request", "open", "bob", "high", 2),
-        ("Add activity feed", "No way to see recent changes", "open", None, "low", 2),
-        ("Fix delete cascade", "Deleting a project leaves orphaned tasks", "open", "alice", "high", 1),
-        ("Add task priorities", "Need visual indicators for task priority", "in_progress", "charlie", "medium", 2),
-        ("Fix standup submission", "Standup fails silently with empty blockers", "open", "bob", "medium", 1),
-        ("Add webhook support", "Integrate with Slack/Discord for notifications", "open", None, "medium", 1),
+        ("Fix login timeout", "Users report being logged out after 5 minutes", "open", "alice", "high", 1, None),
+        ("Add password reset", "No way to reset password currently", "open", "bob", "high", 1, None),
+        ("Dashboard loading slow", "Takes 10+ seconds to load task list", "open", "bob", "critical", 2, None),
+        ("Search is broken", "Search returns no results for exact matches", "open", "alice", "high", 1, None),
+        ("Add dark mode", "Multiple user requests for dark mode", "open", "charlie", "medium", 2, None),
+        ("Fix mobile layout", "Buttons overlap on small screens", "open", "charlie", "high", 3, None),
+        ("Add CSV export", "Users want to export their tasks", "open", None, "medium", 1, None),
+        ("Rate limiting", "No rate limiting on API endpoints", "open", "alice", "high", 1, None),
+        ("Fix duplicate users", "Can create multiple users with same username", "open", "alice", "critical", 1, None),
+        ("Add task due dates", "Tasks have no due date field", "open", None, "medium", 1, None),
+        ("Improve error messages", "API returns generic 500 errors", "in_progress", "bob", "medium", 1, None),
+        ("Add user avatars", "Profile pictures for users", "open", None, "low", 2, None),
+        ("Fix comment count", "Task list shows wrong number of comments", "open", "alice", "medium", 1, None),
+        ("Add task labels", "Users want to tag tasks with labels", "open", None, "medium", 1, None),
+        ("Setup CI/CD", "No automated testing or deployment", "open", "alice", "high", 4, None),
+        ("Fix pagination", "Page 2 shows same results as page 1", "open", "bob", "high", 1, None),
+        ("Add email notifications", "No notifications when assigned to task", "open", None, "medium", 1, None),
+        ("Fix timezone handling", "All dates show in UTC regardless of user timezone", "open", "bob", "medium", 1, None),
+        ("Add task attachments", "Users want to attach files to tasks", "open", None, "low", 1, None),
+        ("Improve API docs", "Swagger docs are incomplete", "open", None, "low", 1, None),
+        ("Fix standup date filter", "Cannot filter standups by date range", "open", "alice", "medium", 1, None),
+        ("Add project archiving", "No way to archive completed projects", "open", None, "low", 1, None),
+        ("Fix memory leak", "Server memory usage grows over time", "open", "alice", "critical", 4, None),
+        ("Add bulk task update", "Cannot update multiple tasks at once", "open", None, "medium", 1, None),
+        ("Fix CORS errors", "Frontend gets CORS errors on every request", "open", "bob", "high", 2, None),
+        ("Add activity feed", "No way to see recent changes", "open", None, "low", 2, None),
+        ("Fix delete cascade", "Deleting a project leaves orphaned tasks", "open", "alice", "high", 1, None),
+        ("Add task priorities", "Need visual indicators for task priority", "in_progress", "charlie", "medium", 2, None),
+        ("Fix standup submission", "Standup fails silently with empty blockers", "open", "bob", "medium", 1, None),
+        ("Add webhook support", "Integrate with Slack/Discord for notifications", "open", None, "medium", 1, None),
     ]
     for t in tasks:
         c.execute(
-            "INSERT INTO tasks (title, description, status, assignee, priority, project_id) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tasks (title, description, status, assignee, priority, project_id, embedding) VALUES (?, ?, ?, ?, ?, ?, ?)",
             t,
         )
 
@@ -175,3 +176,46 @@ def seed_data():
 
     conn.commit()
     conn.close()
+
+
+def search_tasks_by_embedding(query_embedding: list[float], limit: int = 10) -> list:
+    conn = get_connection()
+    c = conn.cursor()
+    
+    # Convert embedding to bytes for storage
+    query_embedding_bytes = bytes([int(x * 255) for x in query_embedding])
+    
+    # Calculate cosine similarity and rank tasks
+    c.execute("""
+        SELECT id, title, description, status, assignee, priority, project_id, embedding,
+               (1 - (embedding <-> ?)) as similarity
+        FROM tasks
+        ORDER BY similarity DESC
+        LIMIT ?
+    """, (query_embedding_bytes, limit))
+    
+    results = c.fetchall()
+    conn.close()
+    return results
+
+
+def search_tasks(query: str = None, use_embeddings: bool = False, query_embedding: list[float] = None, limit: int = 10) -> list:
+    conn = get_connection()
+    c = conn.cursor()
+
+    if use_embeddings and query_embedding is not None:
+        return search_tasks_by_embedding(query_embedding, limit)
+    
+    if not query:
+        c.execute("SELECT * FROM tasks LIMIT ?", (limit,))
+    else:
+        search_term = f"%{query}%"
+        c.execute("""
+            SELECT * FROM tasks
+            WHERE title LIKE ? OR description LIKE ?
+            LIMIT ?
+        """, (search_term, search_term, limit))
+
+    results = c.fetchall()
+    conn.close()
+    return results
