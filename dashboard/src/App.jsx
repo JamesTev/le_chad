@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import './index.css'
 
 // ── Mock data pools ──────────────────────────────────────────────────────────
@@ -191,19 +191,49 @@ function SeverityDot({ severity }) {
   )
 }
 
-function IssueCard({ issue, index }) {
-  const Wrapper = issue.url ? 'a' : 'div'
-  const linkProps = issue.url ? { href: issue.url, target: '_blank', rel: 'noopener noreferrer' } : {}
+function IssueCard({ issue, index, showCreateGh }) {
+  const [creating, setCreating] = useState(false)
+  const [created, setCreated] = useState(false)
+
+  const handleCreateGhIssue = async (e) => {
+    e.stopPropagation()
+    if (creating || created) return
+    setCreating(true)
+    try {
+      const resp = await fetch('/api/create-github-issue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: issue.title,
+          source: issue.sourceDetail,
+          url: issue.url || '',
+          category: issue.category.name,
+          severity: issue.severity.name,
+        }),
+      })
+      if (resp.ok) setCreated(true)
+    } catch (err) {
+      console.error('Failed to create GitHub issue:', err)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
-    <Wrapper
-      {...linkProps}
-      className={`animate-fade-in-up bg-surface-700/60 backdrop-blur-sm border border-surface-500/50 rounded-lg p-3.5 hover:border-surface-400/70 hover:bg-surface-700/80 transition-all duration-200 group block ${issue.url ? 'cursor-pointer' : 'cursor-default'}`}
+    <div
+      className="animate-fade-in-up bg-surface-700/60 backdrop-blur-sm border border-surface-500/50 rounded-lg p-3.5 hover:border-surface-400/70 hover:bg-surface-700/80 transition-all duration-200 group cursor-default"
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="text-sm font-medium text-slate-200 leading-snug group-hover:text-white transition-colors line-clamp-2">
-          {issue.title}
-        </h4>
+        {issue.url ? (
+          <a href={issue.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-slate-200 leading-snug group-hover:text-white hover:text-accent-cyan transition-colors line-clamp-2">
+            {issue.title}
+          </a>
+        ) : (
+          <h4 className="text-sm font-medium text-slate-200 leading-snug group-hover:text-white transition-colors line-clamp-2">
+            {issue.title}
+          </h4>
+        )}
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${issue.category.color}`}>
@@ -215,11 +245,32 @@ function IssueCard({ issue, index }) {
         <span className="text-[11px] text-slate-500 font-mono">{issue.sourceDetail}</span>
         <span className="text-[11px] text-slate-600">{issue.timeAgo}</span>
       </div>
-    </Wrapper>
+      {showCreateGh && (
+        <div className="mt-2.5">
+          {!created ? (
+            <button
+              onClick={handleCreateGhIssue}
+              disabled={creating}
+              className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all cursor-pointer bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/40 hover:text-white hover:scale-[1.02] active:scale-[0.98] shadow-sm shadow-purple-500/10"
+              title="Create GitHub issue"
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+              </svg>
+              {creating ? 'Creating...' : '+ Create GitHub Issue'}
+            </button>
+          ) : (
+            <span className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-accent-emerald/20 text-accent-emerald border border-accent-emerald/30">
+              ✓ Issue Created
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
-function SourceColumn({ icon, title, issues, accentColor, scanning }) {
+function SourceColumn({ icon, title, issues, accentColor, scanning, showCreateGh }) {
   return (
     <div className="flex flex-col min-w-0">
       <div className="flex items-center justify-between mb-4 px-1">
@@ -251,7 +302,7 @@ function SourceColumn({ icon, title, issues, accentColor, scanning }) {
               <p className="text-[10px] mt-1 text-slate-700">Click "Run Scan" to begin</p>
             </div>
           ) : (
-            issues.map((issue, i) => <IssueCard key={issue.id} issue={issue} index={i} />)
+            issues.map((issue, i) => <IssueCard key={issue.id} issue={issue} index={i} showCreateGh={showCreateGh} />)
           )}
         </div>
       </div>
@@ -421,6 +472,7 @@ export default function ChadBotMonitor() {
             issues={hnIssues}
             accentColor="bg-orange-500/15 text-orange-400 border border-orange-500/25"
             scanning={scanning}
+            showCreateGh
           />
           <SourceColumn
             icon={<span>&#x1F426;</span>}
@@ -428,6 +480,7 @@ export default function ChadBotMonitor() {
             issues={twitterIssues}
             accentColor="bg-sky-500/15 text-sky-400 border border-sky-500/25"
             scanning={scanning}
+            showCreateGh
           />
           <SourceColumn
             icon={<span>&#x1F419;</span>}

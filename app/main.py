@@ -133,6 +133,20 @@ def _tweets_to_issues(tweets, analysis):
     return issues
 
 
+def _classify_gh_labels(labels: list[dict]) -> str:
+    """Map GitHub issue labels to a frontend category."""
+    names = {l.get("name", "").lower() for l in labels}
+    if names & {"bug", "defect"}:
+        return "Bug"
+    if names & {"enhancement", "feature", "feature request"}:
+        return "Feature Request"
+    if names & {"complaint", "ux", "documentation"}:
+        return "Complaint"
+    if names & {"praise", "good first issue"}:
+        return "Praise"
+    return "Bug"
+
+
 # ── Scan endpoint ───────────────────────────────────────────────────────────
 
 @app.post("/api/scan")
@@ -168,8 +182,82 @@ async def scan():
         logger.exception("Twitter scan failed")
         errors.append(f"twitter: {exc}")
 
-    # --- GitHub (placeholder — already handled by webhook) ---
-    # GitHub issues arrive via webhook, not polling. This column stays empty
-    # unless you add a REST scan here later.
+    # --- GitHub Issues ---
+    try:
+        gh_token = os.environ.get("GITHUB_TOKEN", "")
+        headers = {"Accept": "application/vnd.github+json"}
+        if gh_token:
+            headers["Authorization"] = f"Bearer {gh_token}"
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://api.github.com/repos/JamesTev/le_chad/issues",
+                headers=headers,
+                params={"state": "open", "per_page": 20},
+            )
+            resp.raise_for_status()
+            gh_issues_raw = resp.json()
+        results["github"] = [
+            {
+                "id": issue["number"],
+                "title": issue["title"],
+                "category": _classify_gh_labels(issue.get("labels", [])),
+                "severity": "High" if any(l.get("name", "").lower() in ("critical", "urgent", "priority") for l in issue.get("labels", [])) else "Medium",
+                "sourceDetail": f"#{issue['number']}",
+                "timeAgo": issue["created_at"][:10],
+                "url": issue["html_url"],
+            }
+            for issue in gh_issues_raw
+            if "pull_request" not in issue  # skip PRs
+        ]
+    except (Exception, SystemExit) as exc:
+        logger.exception("GitHub scan failed")
+        errors.append(f"github: {exc}")
 
     return {"results": results, "errors": errors}
+
+
+# ── Create GitHub issue endpoint ────────────────────────────────────────────
+
+GITHUB_REPO = "JamesTev/le_chad"
+
+
+@app.post("/api/create-github-issue")
+async def create_github_issue(request: Request):
+    """Create a GitHub issue from an HN or Twitter finding."""
+    data = await request.json()
+    gh_token = os.environ.get("GITHUB_TOKEN", "")
+    if not gh_token:
+        raise HTTPException(status_code=500, detail="GITHUB_TOKEN not configured")
+
+    title = data.get("title", "Untitled issue")
+    source = data.get("source", "")
+    url = data.get("url", "")
+    category = data.get("category", "")
+    severity = data.get("severity", "")
+
+    body = f"**Source:** {source}\n"
+    if url:
+        body += f"**Original link:** {url}\n"
+    body += f"**Category:** {category}\n"
+    body += f"**Severity:** {severity}\n"
+    body += f"\n---\n*Auto-created by ChadBot Monitor*"
+
+    labels = []
+    if category == "Bug":
+        labels.append("bug")
+    elif category == "Feature Request":
+        labels.append("enhancement")
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            f"https://api.github.com/repos/{GITHUB_REPO}/issues",
+            headers={
+                "Authorization": f"Bearer {gh_token}",
+                "Accept": "application/vnd.github+json",
+            },
+            json={"title": title, "body": body, "labels": labels},
+        )
+        resp.raise_for_status()
+        created = resp.json()
+
+    return {"issue_url": created["html_url"], "number": created["number"]}
