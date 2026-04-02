@@ -158,17 +158,21 @@ version = "0.1.0"
 source = { editable = "feature-builder" }
 dependencies = [
     { name = "anthropic" },
+    { name = "fastapi" },
     { name = "httpx" },
     { name = "mistralai" },
     { name = "python-dotenv" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.42.0" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mistralai", specifier = ">=2.2.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 
 [[package]]

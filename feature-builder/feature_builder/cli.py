@@ -30,6 +30,8 @@ from .hn import (
 )
 from .context import generate_product_context
 from .scout import run_scout, scout_to_markdown
+from .pipeline import run_pipeline
+from .logger import read_logs
 
 load_dotenv()
 
@@ -227,7 +229,66 @@ def build_parser() -> argparse.ArgumentParser:
     scout_p.add_argument("--min-score", "-s", type=int, default=5, help="Minimum upvote score")
     scout_p.add_argument("--also-search", nargs="*", help="Extra HN search terms")
 
+    pipe_p = sub.add_parser("pipeline", help="Run full pipeline: scout -> plan -> implement -> test -> PR")
+    pipe_p.add_argument("--context", "-c", default="product_context.md", help="Path to product_context.md")
+    pipe_p.add_argument("--repo", "-r", required=True, help="Path to target product repo")
+    pipe_p.add_argument("--max-ideas", type=int, default=3, help="Max ideas to process")
+    pipe_p.add_argument("--min-score", "-s", type=int, default=5, help="Minimum HN upvote score")
+    pipe_p.add_argument("--dry-run", action="store_true", help="Plan only, don't implement")
+    pipe_p.add_argument("--log", default="pipeline_runs.jsonl", help="Log file path")
+
+    logs_p = sub.add_parser("logs", help="View pipeline run logs")
+    logs_p.add_argument("--log", default="pipeline_runs.jsonl", help="Log file path")
+    logs_p.add_argument("--last", type=int, default=10, help="Show last N entries")
+
     return parser
+
+
+async def cmd_pipeline(args: argparse.Namespace) -> None:
+    context_path = Path(args.context)
+    repo_path = Path(args.repo).resolve()
+    log_path = Path(args.log)
+
+    print(f"\n  Context: {context_path}")
+    print(f"  Target repo: {repo_path}")
+    print(f"  Max ideas: {args.max_ideas}")
+    print(f"  Dry run: {args.dry_run}")
+
+    logs = await run_pipeline(
+        context_path=context_path,
+        repo_path=repo_path,
+        log_path=log_path,
+        max_ideas=args.max_ideas,
+        min_score=args.min_score,
+        dry_run=args.dry_run,
+    )
+
+    print(f"\n  {len(logs)} entries written to {log_path}")
+
+
+async def cmd_logs(args: argparse.Namespace) -> None:
+    log_path = Path(args.log)
+    entries = read_logs(log_path)
+
+    if not entries:
+        print(f"  No logs found at {log_path}")
+        return
+
+    recent = entries[-args.last:]
+    print(f"\n  Last {len(recent)} pipeline runs ({log_path}):\n")
+    for e in recent:
+        ts = e.get("timestamp", "?")[:19]
+        outcome = e.get("outcome", "?")
+        title = e.get("plan_title") or e.get("story_title", "?")
+        dur = e.get("duration_s", 0)
+        pr = e.get("pr_result", {}).get("url", "")
+
+        icon = {"pr_created": "PR", "attempted": "AT", "dry_run": "DR", "error": "ER"}.get(outcome, "??")
+        print(f"  [{icon}] {ts} | {title} ({dur:.1f}s)")
+        if pr:
+            print(f"        PR: {pr}")
+        if e.get("error"):
+            print(f"        Error: {e['error'][:100]}")
 
 
 def main() -> None:
@@ -240,6 +301,8 @@ def main() -> None:
         "search": cmd_search,
         "context": cmd_context,
         "scout": cmd_scout,
+        "pipeline": cmd_pipeline,
+        "logs": cmd_logs,
     }
     asyncio.run(handlers[args.command](args))
 

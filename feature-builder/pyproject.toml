@@ -5,9 +5,11 @@ description = "HN-powered product idea discovery — fetches stories, filters wi
 requires-python = ">=3.14"
 dependencies = [
     "anthropic>=0.42.0",
+    "fastapi>=0.115.0",
     "httpx>=0.28.1",
     "mistralai>=2.2.0",
     "python-dotenv>=1.2.2",
+    "uvicorn>=0.34.0",
 ]
 
 [build-system]
