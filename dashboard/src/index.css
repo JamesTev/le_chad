@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Satoshi", "DM Sans", system-ui, sans-serif;
+  --font-body: "General Sans", "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  --color-surface-900: #0a0a0f;
+  --color-surface-800: #12121a;
+  --color-surface-700: #1a1a25;
+  --color-surface-600: #232330;
+  --color-surface-500: #2e2e3d;
+  --color-surface-400: #3a3a4d;
+
+  --color-accent-orange: #ff6b35;
+  --color-accent-cyan: #00e5ff;
+  --color-accent-green: #34d399;
+  --color-accent-red: #ef4444;
+  --color-accent-amber: #f59e0b;
+  --color-accent-blue: #3b82f6;
+  --color-accent-emerald: #10b981;
+}
+
+@font-face {
+  font-family: "Satoshi";
+  src: url("https://api.fontshare.com/v2/css?f[]=satoshi@700,900&display=swap");
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface-900);
+  color: #e2e8f0;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-500);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-400);
+}
+
+/* Scan line animation */
+@keyframes scanline {
+  0% { transform: translateY(-100%); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(0, 229, 255, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(0, 229, 255, 0.6); }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+.animate-scanline {
+  animation: scanline 1.5s ease-in-out;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
