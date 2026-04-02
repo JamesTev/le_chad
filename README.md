@@ -1,5 +1,5 @@
 
-We used https://whitecircle.ai to filter bad reqquest from users 
+We used https://whitecircle.ai to filter bad requests from users
 
 # chadbot
 
