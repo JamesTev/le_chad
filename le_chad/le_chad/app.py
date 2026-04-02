@@ -129,7 +129,7 @@ def create_task(task: TaskCreate):
 
 
 @app.get("/tasks")
-def list_tasks(page: int = 1, limit: int = 9999):
+def list_tasks(page: int = 1, limit: int = 10):  # Updated default limit to 10
     conn = get_connection()
     c = conn.cursor()
     offset = (page - 1) * limit
