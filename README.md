@@ -1,3 +1,6 @@
+
+We used https://whitecircle.ai to filter bad reqquest from users 
+
 # chadbot
 
 A multi-agent software factory that continuously improves your product codebase -- reactively fixing what's broken and proactively building what's next.
