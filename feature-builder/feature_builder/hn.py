@@ -2,6 +2,7 @@
 Hacker News API client + Mistral-powered idea filter.
 """
 
+import asyncio
 import json
 import os
 import sys
@@ -79,8 +80,6 @@ async def fetch_stories(
     """Fetch stories from a HN feed, optionally filtering by minimum score."""
     raw_limit = limit * 3 if min_score > 0 else limit
     ids = await fetch_story_ids(client, feed, raw_limit)
-
-    import asyncio
     items = await asyncio.gather(*[fetch_item(client, sid) for sid in ids])
 
     stories = []
@@ -158,23 +157,10 @@ async def search_stories(
     ]
 
 
-# ---------- Mistral idea filter ----------
+# ---------- Mistral shared helpers ----------
 
-FILTER_SYSTEM_PROMPT = """\
-You are a product idea filter. You receive a batch of Hacker News story titles (and optional self-text).
-
-For EACH story, decide:
-- "idea": This post describes, demonstrates, or directly inspires a BUILDABLE software product or feature.
-  Examples: "Show HN: I built X", product launches, open-source tool announcements,
-  "I wish X existed", technical posts that imply a clear product opportunity.
-- "noise": Everything else — general news, opinion pieces, hiring posts, meta-discussions,
-  questions without a product angle, political/social commentary.
-
-Be aggressive with filtering. We want high-precision "idea" labels — only clear product inspiration.
-
-Respond with a JSON object with a single key "results" containing an array.
-Each element: {"id": <story_id>, "label": "idea" or "noise", "reason": "<10 words max>"}
-No markdown, no extra text. Just the JSON object."""
+COARSE_BATCH_SIZE = 25
+RELEVANCE_BATCH_SIZE = 20
 
 
 def _get_mistral_client() -> Mistral:
@@ -185,18 +171,51 @@ def _get_mistral_client() -> Mistral:
     return Mistral(api_key=api_key)
 
 
-async def coarse_filter(stories: list[HNStory]) -> list[dict]:
-    """Run Mistral to classify stories as idea vs noise. Returns list of dicts with id, label, reason."""
-    if not stories:
-        return []
-
-    client = _get_mistral_client()
-
-    batch_text = "\n".join(
+def _stories_to_batch_text(stories: list[HNStory]) -> str:
+    return "\n".join(
         f"[ID:{s.id}] {s.title}" + (f" | {s.text[:200]}" if s.text else "")
         for s in stories
     )
 
+
+def _parse_results_json(raw: str, label: str = "LLM") -> list[dict]:
+    """Parse a Mistral JSON response, stripping the 'thinking' CoT field from each result."""
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict) and "results" in parsed:
+            parsed = parsed["results"]
+        if isinstance(parsed, dict):
+            parsed = list(parsed.values())
+        for item in parsed:
+            item.pop("thinking", None)
+        return parsed
+    except json.JSONDecodeError:
+        print(f"[WARN] Failed to parse {label} response:\n{raw[:500]}")
+        return []
+
+
+# ---------- Mistral idea filter ----------
+
+FILTER_SYSTEM_PROMPT = """\
+You are a product idea filter. You receive a batch of Hacker News story titles (and optional self-text).
+
+For EACH story, think step-by-step then decide:
+- "idea": This post describes, demonstrates, or directly inspires a BUILDABLE software product or feature.
+  Examples: "Show HN: I built X", product launches, open-source tool announcements,
+  "I wish X existed", technical posts that imply a clear product opportunity.
+- "noise": Everything else — general news, opinion pieces, hiring posts, meta-discussions,
+  questions without a product angle, political/social commentary.
+
+Be aggressive with filtering. We want high-precision "idea" labels — only clear product inspiration.
+
+Respond with a JSON object with a single key "results" containing an array.
+Each element: {"id": <story_id>, "thinking": "<your reasoning in 1-2 sentences>", "label": "idea" or "noise", "reason": "<10 words max>"}
+IMPORTANT: Always write the "thinking" field BEFORE the "label" field so you reason before deciding.
+No markdown, no extra text. Just the JSON object."""
+
+
+async def _coarse_filter_chunk(client: Mistral, stories: list[HNStory]) -> list[dict]:
+    batch_text = _stories_to_batch_text(stories)
     resp = await client.chat.complete_async(
         model="mistral-small-latest",
         messages=[
@@ -206,18 +225,99 @@ async def coarse_filter(stories: list[HNStory]) -> list[dict]:
         temperature=0.1,
         response_format={"type": "json_object"},
     )
+    return _parse_results_json(resp.choices[0].message.content, "coarse filter")
 
-    raw = resp.choices[0].message.content
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, dict) and "results" in parsed:
-            parsed = parsed["results"]
-        if isinstance(parsed, dict):
-            parsed = list(parsed.values())
-        return parsed
-    except json.JSONDecodeError:
-        print(f"[WARN] Failed to parse LLM response:\n{raw[:500]}")
+
+async def coarse_filter(stories: list[HNStory]) -> list[dict]:
+    """Classify stories as idea vs noise. Batches into concurrent chunks for speed."""
+    if not stories:
         return []
+
+    client = _get_mistral_client()
+    chunks = [
+        stories[i : i + COARSE_BATCH_SIZE]
+        for i in range(0, len(stories), COARSE_BATCH_SIZE)
+    ]
+
+    chunk_results = await asyncio.gather(
+        *[_coarse_filter_chunk(client, chunk) for chunk in chunks]
+    )
+
+    merged: list[dict] = []
+    for result in chunk_results:
+        merged.extend(result)
+    return merged
+
+
+# ---------- Product-aware relevance filter ----------
+
+RELEVANCE_SYSTEM_PROMPT = """\
+You are a product relevance scorer. You receive:
+1. A PRODUCT CONTEXT describing a specific software product (its stack, domain, gaps, keywords).
+2. A batch of Hacker News stories that have already passed a coarse "is this a product/tool?" filter.
+
+For EACH story, think step-by-step about how it relates to the product, then decide:
+- "relevant": This tool, library, MCP, technique, or product could directly improve, integrate with,
+  or solve a known gap in the target product. High confidence it's useful.
+- "maybe": Tangentially related — same domain, similar tech stack, or addresses a general problem
+  the product might face. Worth a look but not a direct fit.
+- "noise": Not relevant to this specific product despite being a real tool/idea.
+
+Also assign a category to each:
+- "tool" — standalone tool or CLI
+- "library" — importable library or framework
+- "mcp" — MCP server, plugin, or integration
+- "technique" — pattern, architecture approach, or best practice
+- "product" — full product or SaaS that could inspire features
+- "other" — doesn't fit above
+
+Respond with a JSON object: {"results": [{"id": <story_id>,
+"thinking": "<your reasoning about how this relates to the product — 1-3 sentences>",
+"label": "relevant"|"maybe"|"noise",
+"category": "<category>", "reason": "<15 words max explaining why it's relevant to the product>"}]}
+IMPORTANT: Always write "thinking" BEFORE "label" so you reason before deciding.
+No markdown, no extra text. Just the JSON object."""
+
+
+async def _relevance_filter_chunk(
+    client: Mistral, stories: list[HNStory], product_context: str
+) -> list[dict]:
+    batch_text = _stories_to_batch_text(stories)
+    user_message = (
+        f"## PRODUCT CONTEXT\n\n{product_context}\n\n"
+        f"## HN STORIES TO SCORE\n\n{batch_text}"
+    )
+    resp = await client.chat.complete_async(
+        model="mistral-small-latest",
+        messages=[
+            {"role": "system", "content": RELEVANCE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
+    return _parse_results_json(resp.choices[0].message.content, "relevance filter")
+
+
+async def relevance_filter(stories: list[HNStory], product_context: str) -> list[dict]:
+    """Score pre-filtered stories for product relevance. Batches into concurrent chunks."""
+    if not stories:
+        return []
+
+    client = _get_mistral_client()
+    chunks = [
+        stories[i : i + RELEVANCE_BATCH_SIZE]
+        for i in range(0, len(stories), RELEVANCE_BATCH_SIZE)
+    ]
+
+    chunk_results = await asyncio.gather(
+        *[_relevance_filter_chunk(client, chunk, product_context) for chunk in chunks]
+    )
+
+    merged: list[dict] = []
+    for result in chunk_results:
+        merged.extend(result)
+    return merged
 
 
 # ---------- Markdown output ----------
@@ -241,7 +341,9 @@ def stories_to_markdown(
         for s in ideas:
             r = result_map.get(s.id, {})
             lines.append(f"### [{s.title}]({s.hn_url})")
-            lines.append(f"- **Score:** {s.score} | **Comments:** {s.num_comments} | **Author:** @{s.author}")
+            lines.append(
+                f"- **Score:** {s.score} | **Comments:** {s.num_comments} | **Author:** @{s.author}"
+            )
             if s.url:
                 lines.append(f"- **Link:** {s.url}")
             lines.append(f"- **Why:** {r.get('reason', 'n/a')}")
@@ -261,7 +363,9 @@ def stories_to_markdown(
     else:
         for s in stories:
             lines.append(f"### [{s.title}]({s.hn_url})")
-            lines.append(f"- **Score:** {s.score} | **Comments:** {s.num_comments} | **Author:** @{s.author}")
+            lines.append(
+                f"- **Score:** {s.score} | **Comments:** {s.num_comments} | **Author:** @{s.author}"
+            )
             if s.url:
                 lines.append(f"- **Link:** {s.url}")
             if s.text:

@@ -8,11 +8,14 @@ Usage:
   uv run feature-builder user shihn fogleman mholt --min-score 50 --filter
   uv run feature-builder search "Show HN" --limit 15 --min-score 100 --filter
   uv run feature-builder search "AI agent" --min-score 20 --filter --output ideas.md
+  uv run feature-builder context --repo ./le_chad
+  uv run feature-builder scout --context product_context.md --output discoveries.md
 """
 
 import argparse
 import asyncio
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 import httpx
@@ -25,6 +28,8 @@ from .hn import (
     coarse_filter,
     stories_to_markdown,
 )
+from .context import generate_product_context
+from .scout import run_scout, scout_to_markdown
 
 load_dotenv()
 
@@ -146,6 +151,47 @@ async def cmd_search(args: argparse.Namespace) -> None:
                 print(f"\n  Saved to {args.output}")
 
 
+async def cmd_context(args: argparse.Namespace) -> None:
+    repo_path = Path(args.repo).resolve()
+    output_path = Path(args.output)
+    print(f"\n  Scanning {repo_path} ...")
+
+    md = await generate_product_context(repo_path)
+    output_path.write_text(md)
+    print(f"  Product context written to {output_path} ({len(md)} chars)")
+
+
+async def cmd_scout(args: argparse.Namespace) -> None:
+    context_path = Path(args.context)
+    extra = args.also_search or []
+
+    print(f"\n  Starting scout (context: {context_path})")
+
+    _context, ideas, rel_results = await run_scout(
+        context_path=context_path,
+        extra_searches=extra,
+        min_score=args.min_score,
+    )
+
+    if not rel_results:
+        print("  No relevant discoveries found.")
+        return
+
+    product_name = "le Chad"
+    for line in _context.splitlines():
+        if line.startswith("# Product Context:"):
+            product_name = line.split(":", 1)[1].strip()
+            break
+
+    md = scout_to_markdown(ideas, rel_results, product_name=product_name)
+
+    if args.output:
+        Path(args.output).write_text(md)
+        print(f"\n  Report saved to {args.output}")
+    else:
+        print("\n" + md)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Explore Hacker News and filter for product ideas using Mistral"
@@ -171,6 +217,16 @@ def build_parser() -> argparse.ArgumentParser:
     search_p.add_argument("query", help="Search query")
     add_common(search_p)
 
+    ctx_p = sub.add_parser("context", help="Generate product_context.md from a codebase")
+    ctx_p.add_argument("--repo", "-r", required=True, help="Path to the product repo")
+    ctx_p.add_argument("--output", "-o", default="product_context.md", help="Output file path")
+
+    scout_p = sub.add_parser("scout", help="Scout HN for tools/libraries relevant to your product")
+    scout_p.add_argument("--context", "-c", default="product_context.md", help="Path to product_context.md")
+    scout_p.add_argument("--output", "-o", type=str, help="Output report to .md file")
+    scout_p.add_argument("--min-score", "-s", type=int, default=5, help="Minimum upvote score")
+    scout_p.add_argument("--also-search", nargs="*", help="Extra HN search terms")
+
     return parser
 
 
@@ -182,6 +238,8 @@ def main() -> None:
         "feed": cmd_feed,
         "user": cmd_user,
         "search": cmd_search,
+        "context": cmd_context,
+        "scout": cmd_scout,
     }
     asyncio.run(handlers[args.command](args))
 
