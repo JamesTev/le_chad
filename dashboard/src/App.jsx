@@ -331,7 +331,6 @@ export default function ChadBotMonitor() {
                   <h1 className="text-lg font-bold text-white tracking-tight font-[family-name:var(--font-display)]">
                     ChadBot Monitor
                   </h1>
-                  <p className="text-xs text-slate-500 mt-0.5">We are monitoring channels for any issues about your project</p>
                 </div>
               </div>
 
@@ -342,7 +341,7 @@ export default function ChadBotMonitor() {
               <div className="flex items-center gap-3 flex-wrap">
                 <span className="text-xs text-slate-500 uppercase tracking-wider">Project</span>
                 <span className="text-sm font-semibold text-slate-300 font-mono bg-surface-700/80 px-2.5 py-1 rounded-md">
-                  ChadBot
+                  Le Chad
                 </span>
 
                 <span className="flex items-center gap-1.5 text-xs font-medium text-accent-emerald bg-accent-emerald/10 border border-accent-emerald/20 px-2.5 py-1 rounded-full">
@@ -411,6 +410,8 @@ export default function ChadBotMonitor() {
             </div>
           )}
         </header>
+
+        <p className="text-sm text-slate-500 mb-8 text-center">👁️ We are monitoring channels for any issues about your project</p>
 
         {/* ── Source Columns ───────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">

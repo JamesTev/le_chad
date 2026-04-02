@@ -1,5 +1,5 @@
 """
-Twitter API client for fetching tweets mentioning ChadBot,
+Twitter API client for fetching tweets mentioning Le Chad,
 plus Claude-powered tweet analysis.
 """
 
@@ -13,11 +13,11 @@ import httpx
 from .llm import chat_json
 
 BEARER_TOKEN_ENV = "TWITTER_BEARER_TOKEN"
-SEARCH_QUERY = "ChadBot -is:retweet lang:en"
+SEARCH_QUERY = "LeChadBot -is:retweet lang:en"
 
 ANALYSIS_SYSTEM_PROMPT = """\
-You are a product intelligence analyst for ChadBot. Your job is to analyze tweets
-mentioning ChadBot and extract actionable product insights.
+You are a product intelligence analyst for Le Chad. Your job is to analyze tweets
+mentioning Le Chad and extract actionable product insights.
 
 For every batch of tweets you receive, you must:
 
@@ -27,7 +27,7 @@ For every batch of tweets you receive, you must:
    - **FEATURE_REQUEST** — The user is suggesting a new feature, improvement, or enhancement.
    - **COMPLAINT** — The user is expressing dissatisfaction, frustration, or negative sentiment (but not reporting a specific bug).
    - **PRAISE** — The user is expressing positive sentiment or satisfaction.
-   - **NEUTRAL** — The tweet mentions ChadBot but has no actionable signal (news, memes, general mentions).
+   - **NEUTRAL** — The tweet mentions Le Chad but has no actionable signal (news, memes, general mentions).
 
 3. For each tweet, extract:
    - `tweet_id`: The tweet's unique ID.
@@ -132,7 +132,7 @@ def analyze_tweets(tweets: list[Tweet]) -> dict:
         indent=2,
     )
     user_message = (
-        "Analyze the following tweets mentioning ChadBot. "
+        "Analyze the following tweets mentioning Le Chad. "
         "Classify and extract insights as instructed.\n\n"
         f"Tweets:\n{tweets_json}"
     )
