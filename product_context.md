@@ -39,6 +39,15 @@ RESTful API built with FastAPI, SQLite for data persistence, single-file databas
 - **Testing**: No test suite visible in codebase
 - **Configuration**: Hardcoded secrets and URLs in config.py
 
+## File Tree (relative paths for code changes)
+- `le_chad/app.py` — FastAPI application with all endpoints
+- `le_chad/db.py` — SQLite database layer (init, seed, queries)
+- `le_chad/models.py` — Pydantic models (User, Task, Project, Comment, Standup)
+- `le_chad/config.py` — Configuration constants (secrets, URLs, feature flags)
+- `le_chad/cli.py` — httpx-based CLI client
+- `le_chad/__init__.py` — Package init
+- `pyproject.toml` — Project dependencies
+
 ## Discovery Keywords
 - FastAPI standup tracker
 - developer task management tool

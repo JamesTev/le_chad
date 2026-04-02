@@ -7,10 +7,21 @@ import subprocess
 from pathlib import Path
 
 
+def _find_git_root(path: Path) -> Path:
+    """Walk up from path to find the git repo root."""
+    current = path.resolve()
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    return path
+
+
 def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    git_root = _find_git_root(cwd)
     return subprocess.run(
         ["git"] + args,
-        cwd=cwd,
+        cwd=git_root,
         capture_output=True,
         text=True,
         timeout=30,
@@ -34,8 +45,10 @@ def create_branch(plan: dict, repo_path: Path) -> str:
 
 
 def commit_changes(plan: dict, repo_path: Path) -> bool:
-    """Stage all changes and commit."""
-    _run_git(["add", "-A"], repo_path)
+    """Stage changes in repo_path and commit."""
+    git_root = _find_git_root(repo_path)
+    rel = repo_path.resolve().relative_to(git_root)
+    _run_git(["add", str(rel)], repo_path)
 
     title = plan.get("title", "chadbot improvement")
     summary = plan.get("summary", "")
