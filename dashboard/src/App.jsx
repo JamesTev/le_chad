@@ -93,19 +93,22 @@ const TWITTER_HANDLES = [
   "@tech_lead_amy", "@platform_eng", "@dx_advocate", "@bot_whisperer",
 ]
 
-const CATEGORIES = [
-  { name: 'Bug', color: 'bg-accent-red/20 text-accent-red border-accent-red/30' },
-  { name: 'Feature Request', color: 'bg-accent-amber/20 text-accent-amber border-accent-amber/30' },
-  { name: 'Complaint', color: 'bg-accent-blue/20 text-accent-blue border-accent-blue/30' },
-  { name: 'Praise', color: 'bg-accent-emerald/20 text-accent-emerald border-accent-emerald/30' },
-]
+const CATEGORIES = {
+  'Bug': { name: 'Bug', color: 'bg-accent-red/20 text-accent-red border-accent-red/30' },
+  'Feature Request': { name: 'Feature Request', color: 'bg-accent-amber/20 text-accent-amber border-accent-amber/30' },
+  'Complaint': { name: 'Complaint', color: 'bg-accent-blue/20 text-accent-blue border-accent-blue/30' },
+  'Praise': { name: 'Praise', color: 'bg-accent-emerald/20 text-accent-emerald border-accent-emerald/30' },
+}
 
-const SEVERITIES = [
-  { name: 'Critical', style: 'text-red-400 font-bold' },
-  { name: 'High', style: 'text-orange-400 font-semibold' },
-  { name: 'Medium', style: 'text-yellow-400 font-medium' },
-  { name: 'Low', style: 'text-slate-400 font-normal' },
-]
+const SEVERITIES = {
+  'Critical': { name: 'Critical', style: 'text-red-400 font-bold' },
+  'High': { name: 'High', style: 'text-orange-400 font-semibold' },
+  'Medium': { name: 'Medium', style: 'text-yellow-400 font-medium' },
+  'Low': { name: 'Low', style: 'text-slate-400 font-normal' },
+}
+
+const CATEGORIES_ARR = Object.values(CATEGORIES)
+const SEVERITIES_ARR = Object.values(SEVERITIES)
 
 const TIME_AGO = [
   "just now", "2 min ago", "5 min ago", "12 min ago", "28 min ago",
@@ -131,7 +134,7 @@ function getTitlesForCategory(categoryName) {
 }
 
 function generateIssue(source) {
-  const category = pick(CATEGORIES)
+  const category = pick(CATEGORIES_ARR)
   const titles = getTitlesForCategory(category.name)
   const id = ++issueIdCounter
 
@@ -148,9 +151,21 @@ function generateIssue(source) {
     id,
     title: pick(titles),
     category,
-    severity: pick(SEVERITIES),
+    severity: pick(SEVERITIES_ARR),
     sourceDetail,
     timeAgo: pick(TIME_AGO),
+  }
+}
+
+function apiIssueToCard(raw) {
+  return {
+    id: raw.id,
+    title: raw.title,
+    category: CATEGORIES[raw.category] || CATEGORIES['Praise'],
+    severity: SEVERITIES[raw.severity] || SEVERITIES['Low'],
+    sourceDetail: raw.sourceDetail,
+    timeAgo: raw.timeAgo,
+    url: raw.url,
   }
 }
 
@@ -177,9 +192,12 @@ function SeverityDot({ severity }) {
 }
 
 function IssueCard({ issue, index }) {
+  const Wrapper = issue.url ? 'a' : 'div'
+  const linkProps = issue.url ? { href: issue.url, target: '_blank', rel: 'noopener noreferrer' } : {}
   return (
-    <div
-      className="animate-fade-in-up bg-surface-700/60 backdrop-blur-sm border border-surface-500/50 rounded-lg p-3.5 hover:border-surface-400/70 hover:bg-surface-700/80 transition-all duration-200 cursor-default group"
+    <Wrapper
+      {...linkProps}
+      className={`animate-fade-in-up bg-surface-700/60 backdrop-blur-sm border border-surface-500/50 rounded-lg p-3.5 hover:border-surface-400/70 hover:bg-surface-700/80 transition-all duration-200 group block ${issue.url ? 'cursor-pointer' : 'cursor-default'}`}
       style={{ animationDelay: `${index * 60}ms` }}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -197,7 +215,7 @@ function IssueCard({ issue, index }) {
         <span className="text-[11px] text-slate-500 font-mono">{issue.sourceDetail}</span>
         <span className="text-[11px] text-slate-600">{issue.timeAgo}</span>
       </div>
-    </div>
+    </Wrapper>
   )
 }
 
@@ -259,17 +277,33 @@ export default function ChadBotMonitor() {
   const [scanning, setScanning] = useState(false)
   const [scanCount, setScanCount] = useState(0)
 
-  const runScan = useCallback(() => {
+  const runScan = useCallback(async () => {
     if (scanning) return
     setScanning(true)
 
-    setTimeout(() => {
+    try {
+      const resp = await fetch('/api/scan', { method: 'POST' })
+      if (!resp.ok) throw new Error(`Scan failed: ${resp.status}`)
+      const data = await resp.json()
+      const r = data.results || {}
+
+      if (r.hackernews?.length)
+        setHnIssues(prev => [...r.hackernews.map(apiIssueToCard), ...prev])
+      if (r.twitter?.length)
+        setTwitterIssues(prev => [...r.twitter.map(apiIssueToCard), ...prev])
+      if (r.github?.length)
+        setGhIssues(prev => [...r.github.map(apiIssueToCard), ...prev])
+
+      setScanCount(c => c + 1)
+    } catch (err) {
+      console.error('Scan error, falling back to mock data:', err)
       setHnIssues(prev => [...generateBatch('hackernews'), ...prev])
       setTwitterIssues(prev => [...generateBatch('twitter'), ...prev])
       setGhIssues(prev => [...generateBatch('github'), ...prev])
       setScanCount(c => c + 1)
+    } finally {
       setScanning(false)
-    }, 1800)
+    }
   }, [scanning])
 
   const totalIssues = hnIssues.length + twitterIssues.length + ghIssues.length
@@ -297,6 +331,7 @@ export default function ChadBotMonitor() {
                   <h1 className="text-lg font-bold text-white tracking-tight font-[family-name:var(--font-display)]">
                     ChadBot Monitor
                   </h1>
+                  <p className="text-xs text-slate-500 mt-0.5">We are monitoring channels for any issues about your project</p>
                 </div>
               </div>
 

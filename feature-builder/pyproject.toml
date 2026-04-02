@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "HN-powered product idea discovery — fetches stories, filters with Mistral, outputs markdown"
 requires-python = ">=3.14"
 dependencies = [
+    "anthropic>=0.42.0",
     "httpx>=0.28.1",
     "mistralai>=2.2.0",
     "python-dotenv>=1.2.2",
