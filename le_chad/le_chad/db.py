@@ -6,14 +6,75 @@ _warm_cache = []
 
 
 def get_connection():
-    return sqlite3.connect(DATABASE_URL)
+    conn = sqlite3.connect(DATABASE_URL)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def _migrate_tasks_and_comments_foreign_keys(conn: sqlite3.Connection) -> None:
+    """Rebuild tasks/comments if they were created without foreign keys (older schema)."""
+    c = conn.cursor()
+    c.execute("PRAGMA foreign_key_list(tasks)")
+    if c.fetchall():
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        c.execute("CREATE TABLE _comments_bak AS SELECT * FROM comments")
+        c.execute("DROP TABLE comments")
+
+        c.execute(
+            """
+            CREATE TABLE tasks_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                description TEXT,
+                status TEXT DEFAULT 'open',
+                assignee TEXT,
+                priority TEXT DEFAULT 'medium',
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        c.execute(
+            """
+            INSERT INTO tasks_new (id, title, description, status, assignee, priority, project_id, created_at)
+            SELECT id, title, description, status, assignee, priority, project_id, created_at FROM tasks
+            """
+        )
+        c.execute("DROP TABLE tasks")
+        c.execute("ALTER TABLE tasks_new RENAME TO tasks")
+
+        c.execute(
+            """
+            CREATE TABLE comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                body TEXT,
+                author TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        c.execute(
+            """
+            INSERT INTO comments (id, task_id, body, author, created_at)
+            SELECT id, task_id, body, author, created_at FROM _comments_bak
+            """
+        )
+        c.execute("DROP TABLE _comments_bak")
+        conn.commit()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def init_db():
     conn = get_connection()
     c = conn.cursor()
 
-    c.execute("""
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT,
@@ -21,9 +82,11 @@ def init_db():
             email TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
 
-    c.execute("""
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT,
@@ -31,9 +94,11 @@ def init_db():
             owner TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
 
-    c.execute("""
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
@@ -41,22 +106,26 @@ def init_db():
             status TEXT DEFAULT 'open',
             assignee TEXT,
             priority TEXT DEFAULT 'medium',
-            project_id INTEGER,
+            project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
 
-    c.execute("""
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_id INTEGER,
+            task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
             body TEXT,
             author TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
 
-    c.execute("""
+    c.execute(
+        """
         CREATE TABLE IF NOT EXISTS standups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user TEXT,
@@ -65,7 +134,10 @@ def init_db():
             blockers TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+        """
+    )
+
+    _migrate_tasks_and_comments_foreign_keys(conn)
 
     conn.commit()
     conn.close()
@@ -80,7 +152,7 @@ def _warm_up_cache():
     try:
         c.execute("SELECT * FROM tasks")
         _warm_cache = c.fetchall()
-    except:
+    except Exception:
         pass
     conn.close()
 
