@@ -1,0 +1,13 @@
+[project]
+name = "idea-factory"
+version = "0.1.0"
+description = "Multi-agent system for discovering and validating product ideas"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["feature-builder"]
+
+[tool.uv.sources]
+feature-builder = { workspace = true }
