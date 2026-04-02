@@ -13,7 +13,7 @@ import httpx
 from .llm import chat_json
 
 BEARER_TOKEN_ENV = "TWITTER_BEARER_TOKEN"
-SEARCH_QUERY = "LeChadBot -is:retweet lang:en"
+SEARCH_QUERY = '"Le Chad" -is:retweet lang:en'
 
 ANALYSIS_SYSTEM_PROMPT = """\
 You are a product intelligence analyst for Le Chad. Your job is to analyze tweets
