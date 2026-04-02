@@ -1,7 +1,7 @@
 [project]
-name = "idea-factory"
+name = "chadbot"
 version = "0.1.0"
-description = "Multi-agent system for discovering and validating product ideas"
+description = "Multi-agent software factory that reactively fixes and proactively improves your product codebase"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = []
