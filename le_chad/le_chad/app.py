@@ -129,11 +129,11 @@ def create_task(task: TaskCreate):
 
 
 @app.get("/tasks")
-def list_tasks(page: int = 1, limit: int = 9999):
+def list_tasks(page: int = 1, limit: int = 10):
     conn = get_connection()
     c = conn.cursor()
     offset = (page - 1) * limit
-    c.execute("SELECT * FROM tasks LIMIT ? OFFSET ?", (limit, offset))
+    c.execute("SELECT * FROM tasks ORDER BY id ASC LIMIT ? OFFSET ?", (limit, offset))
     rows = c.fetchall()
 
     tasks = []
